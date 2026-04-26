@@ -19,6 +19,11 @@ import { ElectionService, ElectionResult } from '../../../core/services/election
 
       <h1>{{ electionTitle() }}</h1>
       <p class="text-muted">{{ totalVotes() }} votes cast</p>
+      @if (!loading() && !error() && !isLive()) {
+        <p class="result-summary" [class.tie-summary]="hasTieForWinner()">
+          {{ resultSummary() }}
+        </p>
+      }
 
       @if (loading()) {
         <div class="loading-state">
@@ -29,9 +34,9 @@ import { ElectionService, ElectionResult } from '../../../core/services/election
       } @else {
         <div class="results-list">
           @for (result of results(); track result.candidate_id; let i = $index) {
-            <div class="result-row" [class.winner]="i === 0 && !isLive()">
+            <div class="result-row" [class.winner]="isWinnerRow(i)" [class.tie-leader]="isTiedLeader(result)">
               <div class="rank">
-                @if (i === 0 && !isLive()) { <i class="ri-trophy-line"></i> } @else { {{ i + 1 }} }
+                @if (isWinnerRow(i)) { <i class="ri-trophy-line"></i> } @else { {{ i + 1 }} }
               </div>
               <div class="candidate-info">
                 <div class="candidate-avatar">{{ result.candidate_name.charAt(0) }}</div>
@@ -50,7 +55,7 @@ import { ElectionService, ElectionResult } from '../../../core/services/election
                 <div class="progress-track">
                   <div class="progress-fill"
                        [style.width.%]="result.vote_percentage ?? 0"
-                       [class.winner-fill]="i === 0"></div>
+                       [class.winner-fill]="isWinnerRow(i)"></div>
                 </div>
               </div>
             </div>
@@ -67,6 +72,8 @@ import { ElectionService, ElectionResult } from '../../../core/services/election
     .live-indicator.is-live { color: var(--clr-success); }
     .live-indicator.is-live .dot { background: var(--clr-success); animation: pulse-dot 1.5s infinite; }
     .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--clr-text-dim); }
+    .result-summary { margin: 0.25rem 0 1rem; font-size: 0.95rem; color: var(--clr-text-muted); }
+    .tie-summary { color: var(--clr-warning); font-weight: 600; }
     @keyframes pulse-dot { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
     .loading-state { display:flex; justify-content:center; padding:4rem; }
     .results-list { display: flex; flex-direction: column; gap: 0.75rem; margin-top: 2rem; }
@@ -78,6 +85,7 @@ import { ElectionService, ElectionResult } from '../../../core/services/election
       border-radius: 12px; transition: all 0.2s;
     }
     .result-row.winner { border-color: rgba(108,99,255,0.5); background: rgba(108,99,255,0.07); box-shadow: 0 0 20px rgba(108,99,255,0.15); }
+    .result-row.tie-leader { border-color: rgba(245,158,11,0.45); background: rgba(245,158,11,0.09); }
     .rank { font-size: 1.1rem; font-weight: 700; color: var(--clr-text-muted); text-align: center; }
     .candidate-info { display: flex; align-items: center; gap: 0.875rem; }
     .candidate-avatar { width: 40px; height: 40px; border-radius: 50%; background: linear-gradient(135deg, var(--clr-primary), var(--clr-secondary)); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem; color: white; flex-shrink: 0; }
@@ -125,5 +133,37 @@ export class ResultsComponent implements OnInit {
         this.loading.set(false);
       },
     });
+  }
+
+  isWinnerRow(index: number): boolean {
+    return !this.isLive() && !this.hasTieForWinner() && index === 0;
+  }
+
+  isTiedLeader(result: ElectionResult): boolean {
+    if (!this.hasTieForWinner()) return false;
+    const topVotes = this.results()[0]?.vote_count;
+    return topVotes !== undefined && result.vote_count === topVotes;
+  }
+
+  hasTieForWinner(): boolean {
+    const res = this.results();
+    if (this.isLive() || res.length < 2) return false;
+
+    const topVotes = res[0].vote_count;
+    const tiedLeaders = res.filter(r => r.vote_count === topVotes).length;
+    return tiedLeaders > 1;
+  }
+
+  resultSummary(): string {
+    const res = this.results();
+    if (!res.length) return 'No votes recorded yet.';
+
+    if (this.hasTieForWinner()) {
+      const topVotes = res[0].vote_count;
+      const tiedLeaders = res.filter(r => r.vote_count === topVotes).length;
+      return `No winner. Tie between ${tiedLeaders} candidates with ${topVotes} votes each.`;
+    }
+
+    return `Winner: ${res[0].candidate_name}`;
   }
 }

@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS elections (
     status           election_status  NOT NULL DEFAULT 'draft',
     created_by       UUID             NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     is_public_results BOOLEAN         NOT NULL DEFAULT TRUE,
+    results_published BOOLEAN         NOT NULL DEFAULT FALSE,
     created_at       TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMPTZ      NOT NULL DEFAULT NOW(),
     CONSTRAINT chk_election_times CHECK (end_time > start_time)

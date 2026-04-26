@@ -1,29 +1,10 @@
 services:
-  postgres:
-    image: postgres:16-bookworm
-    container_name: voting-postgres
-    restart: unless-stopped
-    profiles: ["local-db"]
-    environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres-data:/var/lib/postgresql/data
-      - ./database/migrations:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
-      interval: 10s
-      timeout: 5s
-      retries: 10
-      start_period: 10s
-
   redis:
     image: redis:7-alpine
     container_name: voting-redis
     restart: unless-stopped
+    env_file:
+      - .env
     ports:
       - "6379:6379"
     healthcheck:
@@ -38,19 +19,19 @@ services:
       dockerfile: auth-service/Dockerfile
     container_name: voting-auth
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      PORT: ${AUTH_PORT}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      RUST_LOG: ${RUST_LOG}
+      PORT: ${AUTH_PORT:-3001}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: ${RUST_LOG:-info}
     ports:
-      - "${AUTH_PORT}:${AUTH_PORT}"
+      - "${AUTH_PORT:-3001}:${AUTH_PORT:-3001}"
     depends_on:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${AUTH_PORT}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${AUTH_PORT:-3001}/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -62,18 +43,19 @@ services:
       dockerfile: election-service/Dockerfile
     container_name: voting-election
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      PORT: ${ELECTION_PORT}
-      DATABASE_URL: ${DATABASE_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      RUST_LOG: ${RUST_LOG}
+      PORT: ${ELECTION_PORT:-3002}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: ${RUST_LOG:-info}
     ports:
-      - "${ELECTION_PORT}:${ELECTION_PORT}"
+      - "${ELECTION_PORT:-3002}:${ELECTION_PORT:-3002}"
     depends_on:
-      auth-service:
+      redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${ELECTION_PORT}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${ELECTION_PORT:-3002}/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
@@ -85,25 +67,38 @@ services:
       dockerfile: vote-service/Dockerfile
     container_name: voting-vote
     restart: unless-stopped
+    env_file:
+      - .env
     environment:
-      PORT: ${VOTE_PORT}
-      DATABASE_URL: ${DATABASE_URL}
-      REDIS_URL: ${REDIS_URL}
-      JWT_SECRET: ${JWT_SECRET}
-      RUST_LOG: ${RUST_LOG}
+      PORT: ${VOTE_PORT:-3003}
+      REDIS_URL: redis://redis:6379
+      RUST_LOG: ${RUST_LOG:-info}
     ports:
-      - "${VOTE_PORT}:${VOTE_PORT}"
+      - "${VOTE_PORT:-3003}:${VOTE_PORT:-3003}"
     depends_on:
       redis:
         condition: service_healthy
-      auth-service:
-        condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${VOTE_PORT}/health || exit 1"]
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:${VOTE_PORT:-3003}/health || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 10
       start_period: 20s
 
-volumes:
-  postgres-data:
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: voting-frontend
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      - "${FRONTEND_PORT:-8080}:80"
+    depends_on:
+      auth-service:
+        condition: service_healthy
+      election-service:
+        condition: service_healthy
+      vote-service:
+        condition: service_healthy

@@ -6,11 +6,13 @@ FROM node:20-alpine AS builder
 WORKDIR /app
 
 # Cache npm install layer separately
-COPY package.json package-lock.json* ./
-RUN npm install --silent
+COPY package.json package-lock.json ./
+RUN npm ci --silent
 
-# Copy source and build for production
-COPY . .
+# Copy only the files needed for the Angular build
+COPY angular.json tsconfig.json tsconfig.spec.json proxy.conf.json ./
+COPY nginx.conf ./
+COPY src ./src
 RUN npm run build:prod
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -26,10 +28,6 @@ COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Copy built Angular app
 COPY --from=builder /app/dist/voting-frontend/browser /usr/share/nginx/html
-
-# Non-root user
-RUN chown -R nginx:nginx /usr/share/nginx/html && \
-    chmod -R 755 /usr/share/nginx/html
 
 EXPOSE 80
 

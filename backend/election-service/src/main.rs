@@ -40,6 +40,15 @@ async fn main() -> anyhow::Result<()> {
         .connect(&database_url)
         .await?;
 
+    sqlx::query(
+        r#"
+        ALTER TABLE elections
+        ADD COLUMN IF NOT EXISTS results_published BOOLEAN NOT NULL DEFAULT FALSE
+        "#,
+    )
+    .execute(&db_pool)
+    .await?;
+
     let redis_client  = redis::Client::open(redis_url)?;
     let redis_manager = redis::aio::ConnectionManager::new(redis_client).await?;
 
